@@ -39,6 +39,14 @@ public final class Grid {
         return cells.length;
     }
 
+    public int x(int idx) {
+        return idx % width;
+    }
+
+    public int y(int idx) {
+        return idx / width;
+    }
+
     public int idx(int x, int y) {
         return y * width + x;
     }

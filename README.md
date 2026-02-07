@@ -23,4 +23,4 @@ El JAR se genera como:
 java -jar target/traffic-abm.jar --help
 ```
 
-Los comandos finales y parámetros exactos se consolidarán conforme se implemente el motor (según `specs/spec.md` y `plans/plan.md`).
+Los comandos finales y parámetros exactos se consolidarán conforme se implemente el motor.
