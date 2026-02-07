@@ -24,11 +24,11 @@ public class Main implements Runnable {
     @Option(names = "--grid", required = true, description = "Ruta del archivo de rejilla (.txt)")
     private Path grid;
 
-    @Option(names = "--vehicles", required = true, description = "Numero de vehiculos (N)")
-    private int vehicles;
+    @Option(names = "--vehicles", description = "Numero de vehiculos (N)")
+    private Integer vehicles;
 
-    @Option(names = "--ticks", required = true, description = "Numero de ticks (T)")
-    private int ticks;
+    @Option(names = "--ticks", description = "Numero de ticks (T)")
+    private Integer ticks;
 
     @Option(names = "--seed", required = true, description = "Semilla determinista")
     private long seed;
@@ -109,10 +109,34 @@ public class Main implements Runnable {
         if (benchmark && sweep) {
             throw new CommandLine.ParameterException(new CommandLine(this), "--benchmark and --sweep cannot be used together");
         }
-        if (vehicles < 0) {
+
+        if (benchmark) {
+            if (vehicles == null) {
+                throw new CommandLine.ParameterException(new CommandLine(this), "--vehicles is required when using --benchmark");
+            }
+            if (ticks == null) {
+                throw new CommandLine.ParameterException(new CommandLine(this), "--ticks is required when using --benchmark");
+            }
+        } else if (sweep) {
+            if ((nList == null || nList.isBlank()) && vehicles == null) {
+                throw new CommandLine.ParameterException(new CommandLine(this), "--vehicles is required for --sweep when --nList is empty");
+            }
+            if ((ticksList == null || ticksList.isBlank()) && ticks == null) {
+                throw new CommandLine.ParameterException(new CommandLine(this), "--ticks is required for --sweep when --ticksList is empty");
+            }
+        } else {
+            if (vehicles == null) {
+                throw new CommandLine.ParameterException(new CommandLine(this), "--vehicles is required");
+            }
+            if (ticks == null) {
+                throw new CommandLine.ParameterException(new CommandLine(this), "--ticks is required");
+            }
+        }
+
+        if (vehicles != null && vehicles < 0) {
             throw new CommandLine.ParameterException(new CommandLine(this), "--vehicles must be >= 0");
         }
-        if (ticks <= 0) {
+        if (ticks != null && ticks <= 0) {
             throw new CommandLine.ParameterException(new CommandLine(this), "--ticks must be > 0");
         }
         if (turnProb < 0.0 || turnProb > 1.0) {
