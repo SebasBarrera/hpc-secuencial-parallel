@@ -10,11 +10,10 @@ import com.nuti.traffic.model.TrafficLightState;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 
 public final class ParallelEngine implements SimulationEngine {
 
@@ -24,7 +23,8 @@ public final class ParallelEngine implements SimulationEngine {
 
     @Override
     public SimulationResult run(SimulationConfig config) {
-        if (config.threads() <= 0) {
+        int threads = config.threads();
+        if (threads <= 0) {
             throw new IllegalArgumentException("threads must be > 0");
         }
 
@@ -46,29 +46,141 @@ public final class ParallelEngine implements SimulationEngine {
         int[] propTargetDir = new int[n];
         boolean[] propCanMove = new boolean[n];
 
-        AtomicIntegerArray axisMin = new AtomicIntegerArray(grid.cellCount() * 2);
+        int[] winners = new int[grid.cellCount() * 4];
+        int[] axisMin = new int[grid.cellCount() * 2];
         int[] axisWinner = new int[grid.cellCount()];
-
-        AtomicIntegerArray winners = new AtomicIntegerArray(grid.cellCount() * 4);
 
         MetricsCollector metrics = new MetricsCollector(ticks);
 
-        ExecutorService pool = Executors.newFixedThreadPool(config.threads());
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
         try {
             Instant start = Instant.now();
-            long startNs = System.nanoTime();
             System.out.println("[" + start + "] START PARALLEL run grid=" + config.gridPath() + " N=" + n + " ticks=" + ticks + " threads=" + config.threads() + " seed=" + config.seed());
+            long startNs = System.nanoTime();
+
+            int workerCount = Math.min(threads, Math.max(1, n));
+            int[] movedCounts = new int[workerCount];
+            int[] stoppedCounts = new int[workerCount];
+
+            final class OccBuffers {
+                private volatile int[] occ;
+                private volatile int[] occNext;
+
+                private OccBuffers(int[] occ, int[] occNext) {
+                    this.occ = occ;
+                    this.occNext = occNext;
+                }
+
+                private void swap() {
+                    int[] a = occ;
+                    occ = occNext;
+                    occNext = a;
+                }
+            }
+
+            OccBuffers buffers = new OccBuffers(occ, occNext);
+            Phaser phaser = new Phaser(workerCount + 1);
+
+            int chunk = (n + workerCount - 1) / workerCount;
+            for (int t = 0; t < workerCount; t++) {
+                int threadId = t;
+                int startIdx = t * chunk;
+                int endIdx = Math.min(n, startIdx + chunk);
+                pool.execute(() -> {
+                    for (int tick = 0; tick < ticks; tick++) {
+                        phaser.arriveAndAwaitAdvance();
+
+                        int[] occLocal = buffers.occ;
+                        for (int i = startIdx; i < endIdx; i++) {
+                            MoveRules.computeProposalForVehicle(
+                                    grid,
+                                    lights,
+                                    vehicles,
+                                    occLocal,
+                                    config,
+                                    tick,
+                                    i,
+                                    propTargetCell,
+                                    propTargetDir,
+                                    propCanMove
+                            );
+                        }
+
+                        phaser.arriveAndAwaitAdvance();
+                        phaser.arriveAndAwaitAdvance();
+
+                        int[] occNextLocal = buffers.occNext;
+                        int moved = 0;
+                        int stopped = 0;
+
+                        int[] cellArr = vehicles.cellIdxArray();
+                        int[] dirArr = vehicles.dirIdxArray();
+
+                        for (int i = startIdx; i < endIdx; i++) {
+                            int cell = cellArr[i];
+                            int dirIdx = dirArr[i];
+
+                            int nextCell = cell;
+                            int nextDirIdx = dirIdx;
+
+                            if (propCanMove[i]) {
+                                int key = propTargetCell[i] * 4 + propTargetDir[i];
+                                if (winners[key] == i) {
+                                    nextCell = propTargetCell[i];
+                                    nextDirIdx = propTargetDir[i];
+                                }
+                            }
+
+                            if (nextCell != cell) {
+                                moved++;
+                            } else {
+                                stopped++;
+                            }
+
+                            cellArr[i] = nextCell;
+                            dirArr[i] = nextDirIdx;
+
+                            int nextKey = nextCell * 4 + nextDirIdx;
+                            if (occNextLocal[nextKey] != -1) {
+                                throw new IllegalStateException("Double-occupancy at tick=" + tick + " cellIdx=" + nextCell + " dirIdx=" + nextDirIdx);
+                            }
+                            occNextLocal[nextKey] = i;
+                        }
+
+                        movedCounts[threadId] = moved;
+                        stoppedCounts[threadId] = stopped;
+
+                        phaser.arriveAndAwaitAdvance();
+                    }
+                });
+            }
 
             for (int tick = 0; tick < ticks; tick++) {
                 updateLights(lights, tick);
 
-                parallelComputeProposals(pool, config.threads(), grid, lights, vehicles, occ, config, tick, propTargetCell, propTargetDir, propCanMove);
-                resolveAxisWinnersParallel(pool, config.threads(), n, propTargetCell, propTargetDir, propCanMove, axisMin, axisWinner);
-                resolveWinnersParallel(pool, config.threads(), n, propTargetCell, propTargetDir, propCanMove, axisWinner, winners);
+                Arrays.fill(winners, -1);
+                Arrays.fill(axisWinner, -1);
+                Arrays.fill(axisMin, Integer.MAX_VALUE);
 
-                int[] swapped = applyMovesParallel(pool, config.threads(), vehicles, occNext, n, propTargetCell, propTargetDir, propCanMove, winners, tick, metrics);
-                occ = swapped;
-                occNext = (occ == occA.array()) ? occB.array() : occA.array();
+                phaser.arriveAndAwaitAdvance();
+                phaser.arriveAndAwaitAdvance();
+
+                resolveWinnersWithAxisExclusion(n, propTargetCell, propTargetDir, propCanMove, winners, axisMin, axisWinner);
+
+                Occupancy.clearAll(buffers.occNext);
+
+                phaser.arriveAndAwaitAdvance();
+                phaser.arriveAndAwaitAdvance();
+
+                int moved = 0;
+                int stopped = 0;
+                for (int t = 0; t < workerCount; t++) {
+                    moved += movedCounts[t];
+                    stopped += stoppedCounts[t];
+                }
+                metrics.record(tick, moved, stopped);
+
+                buffers.swap();
             }
 
             long elapsedMs = (System.nanoTime() - startNs) / 1_000_000L;
@@ -119,109 +231,31 @@ public final class ParallelEngine implements SimulationEngine {
         }
     }
 
-    private static void parallelComputeProposals(
-            ExecutorService pool,
-            int threads,
-            Grid grid,
-            TrafficLight[] lights,
-            VehicleState vehicles,
-            int[] occ,
-            SimulationConfig config,
-            int tick,
-            int[] propTargetCell,
-            int[] propTargetDir,
-            boolean[] propCanMove
-    ) {
-        CountDownLatch latch = new CountDownLatch(threads);
-        int n = vehicles.vehicleCount();
-        int chunk = (n + threads - 1) / threads;
-
-        for (int t = 0; t < threads; t++) {
-            int start = t * chunk;
-            int end = Math.min(n, start + chunk);
-            pool.execute(() -> {
-                try {
-                    for (int i = start; i < end; i++) {
-                        computeProposalForVehicle(grid, lights, vehicles, occ, config, tick, i, propTargetCell, propTargetDir, propCanMove);
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        await(latch);
-    }
-
-    private static void computeProposalForVehicle(
-            Grid grid,
-            TrafficLight[] lights,
-            VehicleState vehicles,
-            int[] occ,
-            SimulationConfig config,
-            int tick,
-            int i,
-            int[] propTargetCell,
-            int[] propTargetDir,
-            boolean[] propCanMove
-    ) {
-        MoveRules.computeProposalForVehicle(
-                grid,
-                lights,
-                vehicles,
-                occ,
-                config,
-                tick,
-                i,
-                propTargetCell,
-                propTargetDir,
-                propCanMove
-        );
-    }
-
-    private static void resolveAxisWinnersParallel(
-            ExecutorService pool,
-            int threads,
+    private static void resolveWinnersWithAxisExclusion(
             int n,
             int[] propTargetCell,
             int[] propTargetDir,
             boolean[] propCanMove,
-            AtomicIntegerArray axisMin,
+            int[] winners,
+            int[] axisMin,
             int[] axisWinner
     ) {
-        for (int i = 0; i < axisMin.length(); i++) {
-            axisMin.set(i, Integer.MAX_VALUE);
+        for (int i = 0; i < n; i++) {
+            if (!propCanMove[i]) {
+                continue;
+            }
+            int cell = propTargetCell[i];
+            int dirIdx = propTargetDir[i];
+            int axis = Direction.fromIndex(dirIdx).isHorizontal() ? 0 : 1;
+            int k = cell * 2 + axis;
+            if (i < axisMin[k]) {
+                axisMin[k] = i;
+            }
         }
-        Arrays.fill(axisWinner, -1);
-
-        CountDownLatch latch = new CountDownLatch(threads);
-        int chunk = (n + threads - 1) / threads;
-
-        for (int t = 0; t < threads; t++) {
-            int start = t * chunk;
-            int end = Math.min(n, start + chunk);
-            pool.execute(() -> {
-                try {
-                    for (int i = start; i < end; i++) {
-                        if (!propCanMove[i]) {
-                            continue;
-                        }
-                        int cell = propTargetCell[i];
-                        int dirIdx = propTargetDir[i];
-                        int axis = Direction.fromIndex(dirIdx).isHorizontal() ? 0 : 1;
-                        casMin(axisMin, cell * 2 + axis, i);
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        await(latch);
 
         for (int cell = 0; cell < axisWinner.length; cell++) {
-            int hMin = axisMin.get(cell * 2);
-            int vMin = axisMin.get(cell * 2 + 1);
+            int hMin = axisMin[cell * 2];
+            int vMin = axisMin[cell * 2 + 1];
             if (hMin == Integer.MAX_VALUE && vMin == Integer.MAX_VALUE) {
                 continue;
             }
@@ -231,166 +265,23 @@ public final class ParallelEngine implements SimulationEngine {
                 axisWinner[cell] = 1;
             }
         }
-    }
 
-    private static void resolveWinnersParallel(
-            ExecutorService pool,
-            int threads,
-            int n,
-            int[] propTargetCell,
-            int[] propTargetDir,
-            boolean[] propCanMove,
-            int[] axisWinner,
-            AtomicIntegerArray winners
-    ) {
-        for (int i = 0; i < winners.length(); i++) {
-            winners.set(i, -1);
-        }
-
-        CountDownLatch latch = new CountDownLatch(threads);
-        int chunk = (n + threads - 1) / threads;
-
-        for (int t = 0; t < threads; t++) {
-            int start = t * chunk;
-            int end = Math.min(n, start + chunk);
-            pool.execute(() -> {
-                try {
-                    for (int i = start; i < end; i++) {
-                        if (!propCanMove[i]) {
-                            continue;
-                        }
-                        int cell = propTargetCell[i];
-                        int dirIdx = propTargetDir[i];
-                        int axis = Direction.fromIndex(dirIdx).isHorizontal() ? 0 : 1;
-                        if (axisWinner[cell] != axis) {
-                            continue;
-                        }
-                        int key = cell * 4 + dirIdx;
-                        casMinAllowEmptyMinusOne(winners, key, i);
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        await(latch);
-    }
-
-    private static int[] applyMovesParallel(
-            ExecutorService pool,
-            int threads,
-            VehicleState vehicles,
-            int[] occNext,
-            int n,
-            int[] propTargetCell,
-            int[] propTargetDir,
-            boolean[] propCanMove,
-            AtomicIntegerArray winners,
-            int tick,
-            MetricsCollector metrics
-    ) {
-        Occupancy.clearAll(occNext);
-
-        int[] movedCounts = new int[threads];
-        int[] stoppedCounts = new int[threads];
-
-        int[] cellArr = vehicles.cellIdxArray();
-        int[] dirArr = vehicles.dirIdxArray();
-
-        CountDownLatch latch = new CountDownLatch(threads);
-        int chunk = (n + threads - 1) / threads;
-
-        for (int t = 0; t < threads; t++) {
-            int threadId = t;
-            int start = t * chunk;
-            int end = Math.min(n, start + chunk);
-            pool.execute(() -> {
-                int moved = 0;
-                int stopped = 0;
-                try {
-                    for (int i = start; i < end; i++) {
-                        int cell = cellArr[i];
-                        int dirIdx = dirArr[i];
-
-                        int nextCell = cell;
-                        int nextDirIdx = dirIdx;
-
-                        if (propCanMove[i]) {
-                            int key = propTargetCell[i] * 4 + propTargetDir[i];
-                            if (winners.get(key) == i) {
-                                nextCell = propTargetCell[i];
-                                nextDirIdx = propTargetDir[i];
-                            }
-                        }
-
-                        if (nextCell != cell) {
-                            moved++;
-                        } else {
-                            stopped++;
-                        }
-
-                        cellArr[i] = nextCell;
-                        dirArr[i] = nextDirIdx;
-
-                        int nextKey = nextCell * 4 + nextDirIdx;
-                        if (occNext[nextKey] != -1) {
-                            throw new IllegalStateException("Double-occupancy at tick=" + tick + " cellIdx=" + nextCell + " dirIdx=" + nextDirIdx);
-                        }
-                        occNext[nextKey] = i;
-                    }
-
-                    movedCounts[threadId] = moved;
-                    stoppedCounts[threadId] = stopped;
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
-
-        await(latch);
-
-        int moved = 0;
-        int stopped = 0;
-        for (int t = 0; t < threads; t++) {
-            moved += movedCounts[t];
-            stopped += stoppedCounts[t];
-        }
-        metrics.record(tick, moved, stopped);
-
-        return occNext;
-    }
-
-    private static void casMin(AtomicIntegerArray arr, int index, int value) {
-        while (true) {
-            int cur = arr.get(index);
-            if (value >= cur) {
-                return;
+        for (int i = 0; i < n; i++) {
+            if (!propCanMove[i]) {
+                continue;
             }
-            if (arr.compareAndSet(index, cur, value)) {
-                return;
+            int cell = propTargetCell[i];
+            int dirIdx = propTargetDir[i];
+            int axis = Direction.fromIndex(dirIdx).isHorizontal() ? 0 : 1;
+            if (axisWinner[cell] != axis) {
+                continue;
             }
-        }
-    }
 
-    private static void casMinAllowEmptyMinusOne(AtomicIntegerArray arr, int index, int value) {
-        while (true) {
-            int cur = arr.get(index);
-            if (cur != -1 && value >= cur) {
-                return;
+            int key = cell * 4 + dirIdx;
+            int w = winners[key];
+            if (w == -1 || i < w) {
+                winners[key] = i;
             }
-            if (arr.compareAndSet(index, cur, value)) {
-                return;
-            }
-        }
-    }
-
-    private static void await(CountDownLatch latch) {
-        try {
-            latch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
         }
     }
 }
