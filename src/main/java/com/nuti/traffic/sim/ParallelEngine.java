@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class ParallelEngine implements SimulationEngine {
 
@@ -81,76 +82,125 @@ public final class ParallelEngine implements SimulationEngine {
             OccBuffers buffers = new OccBuffers(occ, occNext);
             Phaser phaser = new Phaser(workerCount + 1);
 
+            AtomicReference<Throwable> workerError = new AtomicReference<>();
+
+            int winnersLen = winners.length;
+            int axisMinLen = axisMin.length;
+            int axisWinnerLen = axisWinner.length;
+
             int chunk = (n + workerCount - 1) / workerCount;
             for (int t = 0; t < workerCount; t++) {
                 int threadId = t;
                 int startIdx = t * chunk;
                 int endIdx = Math.min(n, startIdx + chunk);
+
+                int wStart = threadId * winnersLen / workerCount;
+                int wEnd = (threadId + 1) * winnersLen / workerCount;
+                int amStart = threadId * axisMinLen / workerCount;
+                int amEnd = (threadId + 1) * axisMinLen / workerCount;
+                int awStart = threadId * axisWinnerLen / workerCount;
+                int awEnd = (threadId + 1) * axisWinnerLen / workerCount;
+
                 pool.execute(() -> {
-                    for (int tick = 0; tick < ticks; tick++) {
-                        phaser.arriveAndAwaitAdvance();
-
-                        int[] occLocal = buffers.occ;
-                        for (int i = startIdx; i < endIdx; i++) {
-                            MoveRules.computeProposalForVehicle(
-                                    grid,
-                                    lights,
-                                    vehicles,
-                                    occLocal,
-                                    config,
-                                    tick,
-                                    i,
-                                    propTargetCell,
-                                    propTargetDir,
-                                    propCanMove
-                            );
-                        }
-
-                        phaser.arriveAndAwaitAdvance();
-                        phaser.arriveAndAwaitAdvance();
-
-                        int[] occNextLocal = buffers.occNext;
-                        int moved = 0;
-                        int stopped = 0;
-
+                    try {
                         int[] cellArr = vehicles.cellIdxArray();
                         int[] dirArr = vehicles.dirIdxArray();
 
-                        for (int i = startIdx; i < endIdx; i++) {
-                            int cell = cellArr[i];
-                            int dirIdx = dirArr[i];
+                        for (int tick = 0; tick < ticks; tick++) {
+                            int phase = phaser.arriveAndAwaitAdvance();
+                            if (phase < 0) {
+                                return;
+                            }
 
-                            int nextCell = cell;
-                            int nextDirIdx = dirIdx;
+                            for (int k = wStart; k < wEnd; k++) {
+                                winners[k] = -1;
+                            }
+                            for (int k = amStart; k < amEnd; k++) {
+                                axisMin[k] = Integer.MAX_VALUE;
+                            }
+                            for (int k = awStart; k < awEnd; k++) {
+                                axisWinner[k] = -1;
+                            }
 
-                            if (propCanMove[i]) {
-                                int key = propTargetCell[i] * 4 + propTargetDir[i];
-                                if (winners[key] == i) {
-                                    nextCell = propTargetCell[i];
-                                    nextDirIdx = propTargetDir[i];
+                            int[] occLocal = buffers.occ;
+                            for (int i = startIdx; i < endIdx; i++) {
+                                MoveRules.computeProposalForVehicle(
+                                        grid,
+                                        lights,
+                                        vehicles,
+                                        occLocal,
+                                        config,
+                                        tick,
+                                        i,
+                                        propTargetCell,
+                                        propTargetDir,
+                                        propCanMove
+                                );
+                            }
+
+                            phase = phaser.arriveAndAwaitAdvance();
+                            if (phase < 0) {
+                                return;
+                            }
+
+                            int[] occNextLocal = buffers.occNext;
+                            int occLen = occNextLocal.length;
+                            int cStart = threadId * occLen / workerCount;
+                            int cEnd = (threadId + 1) * occLen / workerCount;
+                            for (int k = cStart; k < cEnd; k++) {
+                                occNextLocal[k] = -1;
+                            }
+
+                            phase = phaser.arriveAndAwaitAdvance();
+                            if (phase < 0) {
+                                return;
+                            }
+
+                            int moved = 0;
+                            int stopped = 0;
+
+                            for (int i = startIdx; i < endIdx; i++) {
+                                int cell = cellArr[i];
+                                int dirIdx = dirArr[i];
+
+                                int nextCell = cell;
+                                int nextDirIdx = dirIdx;
+
+                                if (propCanMove[i]) {
+                                    int key = propTargetCell[i] * 4 + propTargetDir[i];
+                                    if (winners[key] == i) {
+                                        nextCell = propTargetCell[i];
+                                        nextDirIdx = propTargetDir[i];
+                                    }
                                 }
+
+                                if (nextCell != cell) {
+                                    moved++;
+                                } else {
+                                    stopped++;
+                                }
+
+                                cellArr[i] = nextCell;
+                                dirArr[i] = nextDirIdx;
+
+                                int nextKey = nextCell * 4 + nextDirIdx;
+                                if (occNextLocal[nextKey] != -1) {
+                                    throw new IllegalStateException("Double-occupancy at tick=" + tick + " cellIdx=" + nextCell + " dirIdx=" + nextDirIdx);
+                                }
+                                occNextLocal[nextKey] = i;
                             }
 
-                            if (nextCell != cell) {
-                                moved++;
-                            } else {
-                                stopped++;
-                            }
+                            movedCounts[threadId] = moved;
+                            stoppedCounts[threadId] = stopped;
 
-                            cellArr[i] = nextCell;
-                            dirArr[i] = nextDirIdx;
-
-                            int nextKey = nextCell * 4 + nextDirIdx;
-                            if (occNextLocal[nextKey] != -1) {
-                                throw new IllegalStateException("Double-occupancy at tick=" + tick + " cellIdx=" + nextCell + " dirIdx=" + nextDirIdx);
+                            phase = phaser.arriveAndAwaitAdvance();
+                            if (phase < 0) {
+                                return;
                             }
-                            occNextLocal[nextKey] = i;
                         }
-
-                        movedCounts[threadId] = moved;
-                        stoppedCounts[threadId] = stopped;
-
-                        phaser.arriveAndAwaitAdvance();
+                    } catch (Throwable t2) {
+                        workerError.compareAndSet(null, t2);
+                        phaser.forceTermination();
                     }
                 });
             }
@@ -158,19 +208,48 @@ public final class ParallelEngine implements SimulationEngine {
             for (int tick = 0; tick < ticks; tick++) {
                 updateLights(lights, tick);
 
-                Arrays.fill(winners, -1);
-                Arrays.fill(axisWinner, -1);
-                Arrays.fill(axisMin, Integer.MAX_VALUE);
+                int phase = phaser.arriveAndAwaitAdvance();
+                if (phase < 0) {
+                    Throwable t = workerError.get();
+                    if (t != null) {
+                        throw new RuntimeException(t);
+                    }
+                    throw new IllegalStateException("Worker phaser terminated unexpectedly");
+                }
 
-                phaser.arriveAndAwaitAdvance();
-                phaser.arriveAndAwaitAdvance();
+                phase = phaser.arriveAndAwaitAdvance();
+                if (phase < 0) {
+                    Throwable t = workerError.get();
+                    if (t != null) {
+                        throw new RuntimeException(t);
+                    }
+                    throw new IllegalStateException("Worker phaser terminated unexpectedly");
+                }
+
+                Throwable t = workerError.get();
+                if (t != null) {
+                    throw new RuntimeException(t);
+                }
 
                 resolveWinnersWithAxisExclusion(n, propTargetCell, propTargetDir, propCanMove, winners, axisMin, axisWinner);
 
-                Occupancy.clearAll(buffers.occNext);
+                phase = phaser.arriveAndAwaitAdvance();
+                if (phase < 0) {
+                    t = workerError.get();
+                    if (t != null) {
+                        throw new RuntimeException(t);
+                    }
+                    throw new IllegalStateException("Worker phaser terminated unexpectedly");
+                }
 
-                phaser.arriveAndAwaitAdvance();
-                phaser.arriveAndAwaitAdvance();
+                phase = phaser.arriveAndAwaitAdvance();
+                if (phase < 0) {
+                    t = workerError.get();
+                    if (t != null) {
+                        throw new RuntimeException(t);
+                    }
+                    throw new IllegalStateException("Worker phaser terminated unexpectedly");
+                }
 
                 int moved = 0;
                 int stopped = 0;
