@@ -5,6 +5,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import com.nuti.traffic.bench.BenchmarkRunner;
+import com.nuti.traffic.bench.SweepRunner;
 import com.nuti.traffic.sim.ParallelEngine;
 import com.nuti.traffic.sim.RunMode;
 import com.nuti.traffic.sim.SequentialEngine;
@@ -41,6 +42,9 @@ public class Main implements Runnable {
     @Option(names = "--benchmark", defaultValue = "false", description = "Ejecuta el BenchmarkRunner (warmup + repeticiones) y genera summary CSV")
     private boolean benchmark;
 
+    @Option(names = "--sweep", defaultValue = "false", description = "Ejecuta un barrido (varios N/ticks/threads) y genera un CSV unico")
+    private boolean sweep;
+
     @Option(names = "--reps", defaultValue = "3", description = "Repeticiones por configuracion en benchmark")
     private int repetitions;
 
@@ -49,6 +53,12 @@ public class Main implements Runnable {
 
     @Option(names = "--threads", defaultValue = "1", description = "Numero de hilos (mode=par) o lista separada por comas (benchmark)")
     private String threads;
+
+    @Option(names = "--nList", defaultValue = "", description = "Lista separada por comas de valores de N (solo sweep). Si vacio usa --vehicles")
+    private String nList;
+
+    @Option(names = "--ticksList", defaultValue = "", description = "Lista separada por comas de valores de ticks (solo sweep). Si vacio usa --ticks")
+    private String ticksList;
 
     @Option(names = "--out", description = "Ruta de salida: ticks CSV (runs) o summary CSV (benchmark)")
     private Path out;
@@ -61,6 +71,15 @@ public class Main implements Runnable {
             int[] threadList = parseThreadsList(threads);
             Path outSummary = (out != null) ? out : Path.of("data", "summary.csv");
             new BenchmarkRunner().runBenchmark(grid, vehicles, ticks, seed, turnProb, lightPeriod, repetitions, threadList, outSummary);
+            return;
+        }
+
+        if (sweep) {
+            int[] threadList = parseThreadsList(threads);
+            int[] nVals = (nList != null && !nList.isBlank()) ? parseIntList("--nList", nList) : new int[] { vehicles };
+            int[] tickVals = (ticksList != null && !ticksList.isBlank()) ? parseIntList("--ticksList", ticksList) : new int[] { ticks };
+            Path outSweep = (out != null) ? out : Path.of("data", "sweep.csv");
+            new SweepRunner().runSweep(grid, nVals, tickVals, seed, turnProb, lightPeriod, repetitions, threadList, outSweep);
             return;
         }
 
@@ -87,6 +106,9 @@ public class Main implements Runnable {
     }
 
     private void validateArgs() {
+        if (benchmark && sweep) {
+            throw new CommandLine.ParameterException(new CommandLine(this), "--benchmark and --sweep cannot be used together");
+        }
         if (vehicles < 0) {
             throw new CommandLine.ParameterException(new CommandLine(this), "--vehicles must be >= 0");
         }
@@ -141,6 +163,26 @@ public class Main implements Runnable {
             }
             if (out[i] <= 0) {
                 throw new IllegalArgumentException("Invalid thread count in --threads list: " + out[i]);
+            }
+        }
+        Arrays.sort(out);
+        return out;
+    }
+
+    private static int[] parseIntList(String optName, String s) {
+        if (s == null || s.isBlank()) {
+            return new int[0];
+        }
+        String[] parts = s.split(",");
+        int[] out = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try {
+                out[i] = Integer.parseInt(parts[i].trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid " + optName + " list: " + s);
+            }
+            if (out[i] <= 0) {
+                throw new IllegalArgumentException("Invalid value in " + optName + " list: " + out[i]);
             }
         }
         Arrays.sort(out);
