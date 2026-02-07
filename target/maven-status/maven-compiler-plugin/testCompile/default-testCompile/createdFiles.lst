@@ -1,0 +1,4 @@
+com/nuti/traffic/model/TrafficLightTest.class
+com/nuti/traffic/sim/SeqParDeterminismTest.class
+com/nuti/traffic/sim/MoveRulesTest.class
+com/nuti/traffic/grid/GridLoaderTest.class

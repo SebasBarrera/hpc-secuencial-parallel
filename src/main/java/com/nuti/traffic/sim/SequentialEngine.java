@@ -68,10 +68,12 @@ public final class SequentialEngine implements SimulationEngine {
         System.out.println("MODE: SEQUENTIAL");
         System.out.println("N=" + n + " ticks=" + ticks + " moved_avg=" + avgFlow + " stopped_avg=" + avgStopped + " time_ms=" + elapsedMs);
 
-        Path outTicks = (config.outTicksCsv() != null)
-                ? config.outTicksCsv()
-                : defaultTicksPath(config.mode(), n, ticks, config.threads());
-        csvTicksWriter.write(outTicks, metrics.movedPerTick(), metrics.stoppedPerTick());
+        if (config.writeTicksCsv()) {
+            Path outTicks = (config.outTicksCsv() != null)
+                    ? config.outTicksCsv()
+                    : defaultTicksPath(config.mode(), n, ticks, config.threads());
+            csvTicksWriter.write(outTicks, metrics.movedPerTick(), metrics.stoppedPerTick());
+        }
 
         return new SimulationResult(RunMode.SEQUENTIAL, n, ticks, 1, elapsedMs, avgFlow, avgStopped);
     }

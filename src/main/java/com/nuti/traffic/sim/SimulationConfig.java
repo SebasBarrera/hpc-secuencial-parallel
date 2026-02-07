@@ -11,6 +11,21 @@ public record SimulationConfig(
         int lightPeriod,
         RunMode mode,
         int threads,
-        Path outTicksCsv
+        Path outTicksCsv,
+        boolean writeTicksCsv
 ) {
+
+    public SimulationConfig(
+            Path gridPath,
+            int vehicles,
+            int ticks,
+            long seed,
+            double turnProb,
+            int lightPeriod,
+            RunMode mode,
+            int threads,
+            Path outTicksCsv
+    ) {
+        this(gridPath, vehicles, ticks, seed, turnProb, lightPeriod, mode, threads, outTicksCsv, true);
+    }
 }

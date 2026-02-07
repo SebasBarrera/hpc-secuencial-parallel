@@ -36,17 +36,17 @@ public final class BenchmarkRunner {
             throw new IllegalArgumentException("threadList must be non-empty");
         }
 
-        SimulationConfig warmupSeq = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.SEQUENTIAL, 1, null);
+        SimulationConfig warmupSeq = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.SEQUENTIAL, 1, null, false);
         sequential.run(warmupSeq);
         for (int p : threadList) {
-            SimulationConfig warmupPar = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.PARALLEL, p, null);
+            SimulationConfig warmupPar = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.PARALLEL, p, null, false);
             parallel.run(warmupPar);
         }
 
         Stats seqStats = measureSequential(grid, vehicles, ticks, seed, turnProb, lightPeriod, repetitions);
         List<Row> rows = new ArrayList<>();
 
-        rows.add(new Row("SEQUENTIAL", vehicles, ticks, 1, seqStats.meanTimeMs, seqStats.meanFlow, seqStats.meanStopped, 1.0, 1.0));
+        rows.add(new Row("SEQUENTIAL", vehicles, ticks, 1, seqStats.meanTimeMs, seqStats.stdTimeMs, seqStats.meanFlow, seqStats.meanStopped, 1.0, 1.0));
 
         System.out.println("BENCHMARK SEQUENTIAL reps=" + repetitions + " mean_time_ms=" + seqStats.meanTimeMs + " std_time_ms=" + seqStats.stdTimeMs);
 
@@ -54,7 +54,7 @@ public final class BenchmarkRunner {
             Stats parStats = measureParallel(grid, vehicles, ticks, seed, turnProb, lightPeriod, repetitions, p);
             double speedup = seqStats.meanTimeMs / parStats.meanTimeMs;
             double efficiency = speedup / p;
-            rows.add(new Row("PARALLEL", vehicles, ticks, p, parStats.meanTimeMs, parStats.meanFlow, parStats.meanStopped, speedup, efficiency));
+            rows.add(new Row("PARALLEL", vehicles, ticks, p, parStats.meanTimeMs, parStats.stdTimeMs, parStats.meanFlow, parStats.meanStopped, speedup, efficiency));
 
             System.out.println("BENCHMARK PARALLEL P=" + p + " reps=" + repetitions + " mean_time_ms=" + parStats.meanTimeMs + " std_time_ms=" + parStats.stdTimeMs + " speedup=" + speedup + " efficiency=" + efficiency);
         }
@@ -68,7 +68,7 @@ public final class BenchmarkRunner {
         double[] stoppeds = new double[repetitions];
 
         for (int r = 0; r < repetitions; r++) {
-            SimulationConfig cfg = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.SEQUENTIAL, 1, null);
+            SimulationConfig cfg = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.SEQUENTIAL, 1, null, false);
             SimulationResult res = sequential.run(cfg);
             times[r] = res.timeMs();
             flows[r] = res.avgFlow();
@@ -84,7 +84,7 @@ public final class BenchmarkRunner {
         double[] stoppeds = new double[repetitions];
 
         for (int r = 0; r < repetitions; r++) {
-            SimulationConfig cfg = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.PARALLEL, threads, null);
+            SimulationConfig cfg = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.PARALLEL, threads, null, false);
             SimulationResult res = parallel.run(cfg);
             times[r] = res.timeMs();
             flows[r] = res.avgFlow();
@@ -101,7 +101,7 @@ public final class BenchmarkRunner {
                 Files.createDirectories(parent);
             }
             try (BufferedWriter w = Files.newBufferedWriter(out)) {
-                w.write("mode,N,ticks,threads,time_ms,avg_flow,avg_stopped,speedup,efficiency");
+                w.write("mode,N,ticks,threads,time_ms,std_time_ms,avg_flow,avg_stopped,speedup,efficiency");
                 w.newLine();
                 for (Row row : rows) {
                     w.write(row.mode);
@@ -113,6 +113,8 @@ public final class BenchmarkRunner {
                     w.write(Integer.toString(row.threads));
                     w.write(',');
                     w.write(Double.toString(row.timeMs));
+                    w.write(',');
+                    w.write(Double.toString(row.stdTimeMs));
                     w.write(',');
                     w.write(Double.toString(row.avgFlow));
                     w.write(',');
@@ -135,6 +137,7 @@ public final class BenchmarkRunner {
             int ticks,
             int threads,
             double timeMs,
+            double stdTimeMs,
             double avgFlow,
             double avgStopped,
             double speedup,

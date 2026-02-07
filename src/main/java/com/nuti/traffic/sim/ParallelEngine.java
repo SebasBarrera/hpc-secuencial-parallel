@@ -81,10 +81,12 @@ public final class ParallelEngine implements SimulationEngine {
             System.out.println("MODE: PARALLEL");
             System.out.println("N=" + n + " ticks=" + ticks + " threads=" + config.threads() + " moved_avg=" + avgFlow + " stopped_avg=" + avgStopped + " time_ms=" + elapsedMs);
 
-            Path outTicks = (config.outTicksCsv() != null)
-                    ? config.outTicksCsv()
-                    : defaultTicksPath(config.mode(), n, ticks, config.threads());
-            csvTicksWriter.write(outTicks, metrics.movedPerTick(), metrics.stoppedPerTick());
+            if (config.writeTicksCsv()) {
+                Path outTicks = (config.outTicksCsv() != null)
+                        ? config.outTicksCsv()
+                        : defaultTicksPath(config.mode(), n, ticks, config.threads());
+                csvTicksWriter.write(outTicks, metrics.movedPerTick(), metrics.stoppedPerTick());
+            }
 
             return new SimulationResult(RunMode.PARALLEL, n, ticks, config.threads(), elapsedMs, avgFlow, avgStopped);
         } finally {

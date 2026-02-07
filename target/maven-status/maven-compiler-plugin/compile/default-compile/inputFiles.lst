@@ -9,6 +9,7 @@
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/model/TrafficLight.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/model/TrafficLightState.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/MetricsCollector.java
+/Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/MoveRules.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/Occupancy.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/ParallelEngine.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/RunMode.java
