@@ -9,7 +9,6 @@ import com.nuti.traffic.model.TrafficLightState;
 
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Phaser;
@@ -48,8 +47,9 @@ public final class ParallelEngine implements SimulationEngine {
         boolean[] propCanMove = new boolean[n];
 
         int[] winners = new int[grid.cellCount() * 4];
+        int[] winnersStamp = new int[winners.length];
         int[] axisMin = new int[grid.cellCount() * 2];
-        int[] axisWinner = new int[grid.cellCount()];
+        int[] axisMinStamp = new int[axisMin.length];
 
         MetricsCollector metrics = new MetricsCollector(ticks);
 
@@ -84,22 +84,11 @@ public final class ParallelEngine implements SimulationEngine {
 
             AtomicReference<Throwable> workerError = new AtomicReference<>();
 
-            int winnersLen = winners.length;
-            int axisMinLen = axisMin.length;
-            int axisWinnerLen = axisWinner.length;
-
             int chunk = (n + workerCount - 1) / workerCount;
             for (int t = 0; t < workerCount; t++) {
                 int threadId = t;
                 int startIdx = t * chunk;
                 int endIdx = Math.min(n, startIdx + chunk);
-
-                int wStart = threadId * winnersLen / workerCount;
-                int wEnd = (threadId + 1) * winnersLen / workerCount;
-                int amStart = threadId * axisMinLen / workerCount;
-                int amEnd = (threadId + 1) * axisMinLen / workerCount;
-                int awStart = threadId * axisWinnerLen / workerCount;
-                int awEnd = (threadId + 1) * axisWinnerLen / workerCount;
 
                 pool.execute(() -> {
                     try {
@@ -110,16 +99,6 @@ public final class ParallelEngine implements SimulationEngine {
                             int phase = phaser.arriveAndAwaitAdvance();
                             if (phase < 0) {
                                 return;
-                            }
-
-                            for (int k = wStart; k < wEnd; k++) {
-                                winners[k] = -1;
-                            }
-                            for (int k = amStart; k < amEnd; k++) {
-                                axisMin[k] = Integer.MAX_VALUE;
-                            }
-                            for (int k = awStart; k < awEnd; k++) {
-                                axisWinner[k] = -1;
                             }
 
                             int[] occLocal = buffers.occ;
@@ -143,14 +122,6 @@ public final class ParallelEngine implements SimulationEngine {
                                 return;
                             }
 
-                            int[] occNextLocal = buffers.occNext;
-                            int occLen = occNextLocal.length;
-                            int cStart = threadId * occLen / workerCount;
-                            int cEnd = (threadId + 1) * occLen / workerCount;
-                            for (int k = cStart; k < cEnd; k++) {
-                                occNextLocal[k] = -1;
-                            }
-
                             phase = phaser.arriveAndAwaitAdvance();
                             if (phase < 0) {
                                 return;
@@ -159,16 +130,22 @@ public final class ParallelEngine implements SimulationEngine {
                             int moved = 0;
                             int stopped = 0;
 
+                            int[] occLocal2 = buffers.occ;
+                            int[] occNextLocal = buffers.occNext;
+                            int stamp = tick + 1;
+
                             for (int i = startIdx; i < endIdx; i++) {
                                 int cell = cellArr[i];
                                 int dirIdx = dirArr[i];
+
+                                int oldKey = cell * 4 + dirIdx;
 
                                 int nextCell = cell;
                                 int nextDirIdx = dirIdx;
 
                                 if (propCanMove[i]) {
                                     int key = propTargetCell[i] * 4 + propTargetDir[i];
-                                    if (winners[key] == i) {
+                                    if (winnersStamp[key] == stamp && winners[key] == i) {
                                         nextCell = propTargetCell[i];
                                         nextDirIdx = propTargetDir[i];
                                     }
@@ -182,6 +159,8 @@ public final class ParallelEngine implements SimulationEngine {
 
                                 cellArr[i] = nextCell;
                                 dirArr[i] = nextDirIdx;
+
+                                occLocal2[oldKey] = -1;
 
                                 int nextKey = nextCell * 4 + nextDirIdx;
                                 if (occNextLocal[nextKey] != -1) {
@@ -231,7 +210,18 @@ public final class ParallelEngine implements SimulationEngine {
                     throw new RuntimeException(t);
                 }
 
-                resolveWinnersWithAxisExclusion(n, propTargetCell, propTargetDir, propCanMove, winners, axisMin, axisWinner);
+                int stamp = tick + 1;
+                resolveWinnersWithAxisExclusionStamped(
+                        n,
+                        propTargetCell,
+                        propTargetDir,
+                        propCanMove,
+                        winners,
+                        winnersStamp,
+                        axisMin,
+                        axisMinStamp,
+                        stamp
+                );
 
                 phase = phaser.arriveAndAwaitAdvance();
                 if (phase < 0) {
@@ -253,9 +243,9 @@ public final class ParallelEngine implements SimulationEngine {
 
                 int moved = 0;
                 int stopped = 0;
-                for (int t = 0; t < workerCount; t++) {
-                    moved += movedCounts[t];
-                    stopped += stoppedCounts[t];
+                for (int wi = 0; wi < workerCount; wi++) {
+                    moved += movedCounts[wi];
+                    stopped += stoppedCounts[wi];
                 }
                 metrics.record(tick, moved, stopped);
 
@@ -310,14 +300,16 @@ public final class ParallelEngine implements SimulationEngine {
         }
     }
 
-    private static void resolveWinnersWithAxisExclusion(
+    private static void resolveWinnersWithAxisExclusionStamped(
             int n,
             int[] propTargetCell,
             int[] propTargetDir,
             boolean[] propCanMove,
             int[] winners,
+            int[] winnersStamp,
             int[] axisMin,
-            int[] axisWinner
+            int[] axisMinStamp,
+            int stamp
     ) {
         for (int i = 0; i < n; i++) {
             if (!propCanMove[i]) {
@@ -327,21 +319,14 @@ public final class ParallelEngine implements SimulationEngine {
             int dirIdx = propTargetDir[i];
             int axis = Direction.fromIndex(dirIdx).isHorizontal() ? 0 : 1;
             int k = cell * 2 + axis;
-            if (i < axisMin[k]) {
-                axisMin[k] = i;
-            }
-        }
 
-        for (int cell = 0; cell < axisWinner.length; cell++) {
-            int hMin = axisMin[cell * 2];
-            int vMin = axisMin[cell * 2 + 1];
-            if (hMin == Integer.MAX_VALUE && vMin == Integer.MAX_VALUE) {
+            if (axisMinStamp[k] != stamp) {
+                axisMinStamp[k] = stamp;
+                axisMin[k] = i;
                 continue;
             }
-            if (vMin == Integer.MAX_VALUE || hMin < vMin) {
-                axisWinner[cell] = 0;
-            } else {
-                axisWinner[cell] = 1;
+            if (i < axisMin[k]) {
+                axisMin[k] = i;
             }
         }
 
@@ -352,13 +337,29 @@ public final class ParallelEngine implements SimulationEngine {
             int cell = propTargetCell[i];
             int dirIdx = propTargetDir[i];
             int axis = Direction.fromIndex(dirIdx).isHorizontal() ? 0 : 1;
-            if (axisWinner[cell] != axis) {
+
+            int hKey = cell * 2;
+            int vKey = cell * 2 + 1;
+            int hMin = (axisMinStamp[hKey] == stamp) ? axisMin[hKey] : Integer.MAX_VALUE;
+            int vMin = (axisMinStamp[vKey] == stamp) ? axisMin[vKey] : Integer.MAX_VALUE;
+
+            if (hMin == Integer.MAX_VALUE && vMin == Integer.MAX_VALUE) {
+                continue;
+            }
+            int axisWinner = (vMin == Integer.MAX_VALUE || hMin < vMin) ? 0 : 1;
+            if (axisWinner != axis) {
                 continue;
             }
 
             int key = cell * 4 + dirIdx;
+            if (winnersStamp[key] != stamp) {
+                winnersStamp[key] = stamp;
+                winners[key] = i;
+                continue;
+            }
+
             int w = winners[key];
-            if (w == -1 || i < w) {
+            if (i < w) {
                 winners[key] = i;
             }
         }
