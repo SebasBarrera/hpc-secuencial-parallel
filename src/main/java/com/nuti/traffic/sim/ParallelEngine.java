@@ -274,7 +274,7 @@ public final class ParallelEngine implements SimulationEngine {
             AtomicIntegerArray winners
     ) {
         for (int i = 0; i < winners.length(); i++) {
-            winners.set(i, Integer.MAX_VALUE);
+            winners.set(i, -1);
         }
 
         CountDownLatch latch = new CountDownLatch(threads);
@@ -296,7 +296,7 @@ public final class ParallelEngine implements SimulationEngine {
                             continue;
                         }
                         int key = cell * 4 + dirIdx;
-                        casMin(winners, key, i);
+                        casMinAllowEmptyMinusOne(winners, key, i);
                     }
                 } finally {
                     latch.countDown();
@@ -395,6 +395,18 @@ public final class ParallelEngine implements SimulationEngine {
         while (true) {
             int cur = arr.get(index);
             if (value >= cur) {
+                return;
+            }
+            if (arr.compareAndSet(index, cur, value)) {
+                return;
+            }
+        }
+    }
+
+    private static void casMinAllowEmptyMinusOne(AtomicIntegerArray arr, int index, int value) {
+        while (true) {
+            int cur = arr.get(index);
+            if (cur != -1 && value >= cur) {
                 return;
             }
             if (arr.compareAndSet(index, cur, value)) {

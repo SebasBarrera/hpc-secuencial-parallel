@@ -1,5 +1,6 @@
 # Build artifacts
 /target/
+dependency-reduced-pom.xml
 
 # IDE
 /.idea/
@@ -9,10 +10,4 @@
 # OS
 .DS_Store
 
-# Project docs not to be versioned (per requirement)
-/specs/
-/plans/
-/plan/
-
 # Output data
-/data/

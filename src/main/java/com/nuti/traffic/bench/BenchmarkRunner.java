@@ -36,19 +36,27 @@ public final class BenchmarkRunner {
             throw new IllegalArgumentException("threadList must be non-empty");
         }
 
-        SimulationConfig warmupCfg = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.SEQUENTIAL, 1, null);
-        sequential.run(warmupCfg);
+        SimulationConfig warmupSeq = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.SEQUENTIAL, 1, null);
+        sequential.run(warmupSeq);
+        for (int p : threadList) {
+            SimulationConfig warmupPar = new SimulationConfig(grid, vehicles, ticks, seed, turnProb, lightPeriod, RunMode.PARALLEL, p, null);
+            parallel.run(warmupPar);
+        }
 
         Stats seqStats = measureSequential(grid, vehicles, ticks, seed, turnProb, lightPeriod, repetitions);
         List<Row> rows = new ArrayList<>();
 
         rows.add(new Row("SEQUENTIAL", vehicles, ticks, 1, seqStats.meanTimeMs, seqStats.meanFlow, seqStats.meanStopped, 1.0, 1.0));
 
+        System.out.println("BENCHMARK SEQUENTIAL reps=" + repetitions + " mean_time_ms=" + seqStats.meanTimeMs + " std_time_ms=" + seqStats.stdTimeMs);
+
         for (int p : threadList) {
             Stats parStats = measureParallel(grid, vehicles, ticks, seed, turnProb, lightPeriod, repetitions, p);
             double speedup = seqStats.meanTimeMs / parStats.meanTimeMs;
             double efficiency = speedup / p;
             rows.add(new Row("PARALLEL", vehicles, ticks, p, parStats.meanTimeMs, parStats.meanFlow, parStats.meanStopped, speedup, efficiency));
+
+            System.out.println("BENCHMARK PARALLEL P=" + p + " reps=" + repetitions + " mean_time_ms=" + parStats.meanTimeMs + " std_time_ms=" + parStats.stdTimeMs + " speedup=" + speedup + " efficiency=" + efficiency);
         }
 
         writeSummary(outSummaryCsv, rows);
@@ -136,17 +144,19 @@ public final class BenchmarkRunner {
 
     private static final class Stats {
         private final double meanTimeMs;
+        private final double stdTimeMs;
         private final double meanFlow;
         private final double meanStopped;
 
-        private Stats(double meanTimeMs, double meanFlow, double meanStopped) {
+        private Stats(double meanTimeMs, double stdTimeMs, double meanFlow, double meanStopped) {
             this.meanTimeMs = meanTimeMs;
+            this.stdTimeMs = stdTimeMs;
             this.meanFlow = meanFlow;
             this.meanStopped = meanStopped;
         }
 
         private static Stats from(long[] times, double[] flows, double[] stoppeds) {
-            return new Stats(mean(times), mean(flows), mean(stoppeds));
+            return new Stats(mean(times), stddev(times), mean(flows), mean(stoppeds));
         }
 
         private static double mean(long[] a) {
@@ -155,6 +165,19 @@ public final class BenchmarkRunner {
                 s += v;
             }
             return s / a.length;
+        }
+
+        private static double stddev(long[] a) {
+            if (a.length <= 1) {
+                return 0.0;
+            }
+            double m = mean(a);
+            double s2 = 0.0;
+            for (long v : a) {
+                double d = v - m;
+                s2 += d * d;
+            }
+            return Math.sqrt(s2 / (a.length - 1));
         }
 
         private static double mean(double[] a) {
