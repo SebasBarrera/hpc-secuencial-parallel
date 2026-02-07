@@ -13,12 +13,13 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Arrays;
 
-public final class SequentialEngine {
+public final class SequentialEngine implements SimulationEngine {
 
     private final GridLoader gridLoader = new GridLoader();
     private final VehicleInitializer initializer = new VehicleInitializer();
     private final CsvTicksWriter csvTicksWriter = new CsvTicksWriter();
 
+    @Override
     public SimulationResult run(SimulationConfig config) {
         Grid grid = gridLoader.load(config.gridPath());
 

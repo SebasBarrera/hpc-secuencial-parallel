@@ -1,4 +1,5 @@
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/Main.java
+/Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/bench/BenchmarkRunner.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/grid/GridLoader.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/grid/GridValidationException.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/io/CsvTicksWriter.java
@@ -9,9 +10,11 @@
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/model/TrafficLightState.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/MetricsCollector.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/Occupancy.java
+/Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/ParallelEngine.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/RunMode.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/SequentialEngine.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/SimulationConfig.java
+/Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/SimulationEngine.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/SimulationResult.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/VehicleInitializer.java
 /Users/jbarrerapuli/Documents/Repos/NUTI/HPC/src/main/java/com/nuti/traffic/sim/VehicleState.java

@@ -4,11 +4,14 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import com.nuti.traffic.bench.BenchmarkRunner;
+import com.nuti.traffic.sim.ParallelEngine;
 import com.nuti.traffic.sim.RunMode;
 import com.nuti.traffic.sim.SequentialEngine;
 import com.nuti.traffic.sim.SimulationConfig;
 
 import java.nio.file.Path;
+import java.util.Arrays;
 
 @Command(
         name = "traffic-abm",
@@ -35,20 +38,34 @@ public class Main implements Runnable {
     @Option(names = "--period", defaultValue = "10", description = "Periodo del semaforo (ticks) para modo periodico")
     private int lightPeriod;
 
+    @Option(names = "--benchmark", defaultValue = "false", description = "Ejecuta el BenchmarkRunner (warmup + repeticiones) y genera summary CSV")
+    private boolean benchmark;
+
+    @Option(names = "--reps", defaultValue = "3", description = "Repeticiones por configuracion en benchmark")
+    private int repetitions;
+
     @Option(names = "--mode", defaultValue = "seq", description = "Modo de ejecucion: seq|par")
     private String mode;
 
-    @Option(names = "--threads", defaultValue = "1", description = "Numero de hilos (solo para mode=par)")
-    private int threads;
+    @Option(names = "--threads", defaultValue = "1", description = "Numero de hilos (mode=par) o lista separada por comas (benchmark)")
+    private String threads;
 
-    @Option(names = "--out", description = "Ruta de salida ticks CSV (opcional)")
-    private Path outTicks;
+    @Option(names = "--out", description = "Ruta de salida: ticks CSV (runs) o summary CSV (benchmark)")
+    private Path out;
 
     @Override
     public void run() {
         validateArgs();
 
+        if (benchmark) {
+            int[] threadList = parseThreadsList(threads);
+            Path outSummary = (out != null) ? out : Path.of("data", "summary.csv");
+            new BenchmarkRunner().runBenchmark(grid, vehicles, ticks, seed, turnProb, lightPeriod, repetitions, threadList, outSummary);
+            return;
+        }
+
         RunMode runMode = parseMode(mode);
+        int threadsInt = parseThreadsInt(threads);
         SimulationConfig config = new SimulationConfig(
                 grid,
                 vehicles,
@@ -57,8 +74,8 @@ public class Main implements Runnable {
                 turnProb,
                 lightPeriod,
                 runMode,
-                threads,
-                outTicks
+                threadsInt,
+                out
         );
 
         if (runMode == RunMode.SEQUENTIAL) {
@@ -66,7 +83,7 @@ public class Main implements Runnable {
             return;
         }
 
-        throw new CommandLine.ParameterException(new CommandLine(this), "Parallel mode not implemented yet");
+        new ParallelEngine().run(config);
     }
 
     private void validateArgs() {
@@ -82,8 +99,8 @@ public class Main implements Runnable {
         if (lightPeriod <= 0) {
             throw new CommandLine.ParameterException(new CommandLine(this), "--period must be > 0");
         }
-        if (threads <= 0) {
-            throw new CommandLine.ParameterException(new CommandLine(this), "--threads must be > 0");
+        if (repetitions <= 0) {
+            throw new CommandLine.ParameterException(new CommandLine(this), "--reps must be > 0");
         }
     }
 
@@ -96,6 +113,38 @@ public class Main implements Runnable {
             case "par" -> RunMode.PARALLEL;
             default -> throw new IllegalArgumentException("Invalid --mode: " + mode + " (expected seq|par)");
         };
+    }
+
+    private static int parseThreadsInt(String threads) {
+        try {
+            int p = Integer.parseInt(threads.trim());
+            if (p <= 0) {
+                throw new IllegalArgumentException("--threads must be > 0");
+            }
+            return p;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid --threads for run mode (expected integer): " + threads);
+        }
+    }
+
+    private static int[] parseThreadsList(String threads) {
+        if (threads == null || threads.isBlank()) {
+            return new int[] { 1 };
+        }
+        String[] parts = threads.split(",");
+        int[] out = new int[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            try {
+                out[i] = Integer.parseInt(parts[i].trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Invalid --threads list: " + threads);
+            }
+            if (out[i] <= 0) {
+                throw new IllegalArgumentException("Invalid thread count in --threads list: " + out[i]);
+            }
+        }
+        Arrays.sort(out);
+        return out;
     }
 
     public static void main(String[] args) {
