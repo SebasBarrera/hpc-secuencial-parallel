@@ -1,0 +1,18 @@
+# Build artifacts
+/target/
+
+# IDE
+/.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Project docs not to be versioned (per requirement)
+/specs/
+/plans/
+/plan/
+
+# Output data
+/data/
