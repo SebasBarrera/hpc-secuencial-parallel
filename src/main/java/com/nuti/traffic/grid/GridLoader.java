@@ -62,8 +62,9 @@ public final class GridLoader {
             }
         }
 
+        validateBordersAreBlocks(width, height, cells);
         validateIntersectionsStrict4Way(width, height, cells);
-        validateNoCrossroadsAsRoad(width, height, cells);
+        validateRoadSegmentsAreStraight(width, height, cells);
 
         int[] intersectionCellIdx = new int[intersections.size()];
         for (int i = 0; i < intersections.size(); i++) {
@@ -71,6 +72,25 @@ public final class GridLoader {
         }
 
         return new Grid(width, height, cells, intersectionIndexByCell, intersectionCellIdx);
+    }
+
+    private static void validateBordersAreBlocks(int width, int height, CellType[] cells) {
+        for (int x = 0; x < width; x++) {
+            if (cells[x] != CellType.BLOCK) {
+                throw new GridValidationException("Border cell must be '#' at (x=" + x + ", y=0)");
+            }
+            if (cells[(height - 1) * width + x] != CellType.BLOCK) {
+                throw new GridValidationException("Border cell must be '#' at (x=" + x + ", y=" + (height - 1) + ")");
+            }
+        }
+        for (int y = 0; y < height; y++) {
+            if (cells[y * width] != CellType.BLOCK) {
+                throw new GridValidationException("Border cell must be '#' at (x=0, y=" + y + ")");
+            }
+            if (cells[y * width + (width - 1)] != CellType.BLOCK) {
+                throw new GridValidationException("Border cell must be '#' at (x=" + (width - 1) + ", y=" + y + ")");
+            }
+        }
     }
 
     private static void validateIntersectionsStrict4Way(int width, int height, CellType[] cells) {
@@ -85,17 +105,21 @@ public final class GridLoader {
                     throw new GridValidationException("Intersection '+' cannot be on boundary at (x=" + x + ", y=" + y + ")");
                 }
 
-                if (!isTransitable(cells[(y - 1) * width + x])
-                        || !isTransitable(cells[(y + 1) * width + x])
-                        || !isTransitable(cells[y * width + (x - 1)])
-                        || !isTransitable(cells[y * width + (x + 1)])) {
-                    throw new GridValidationException("Invalid intersection '+' (requires 4-way transitable neighbors) at (x=" + x + ", y=" + y + ")");
+                boolean left = isTransitable(cells[y * width + (x - 1)]);
+                boolean right = isTransitable(cells[y * width + (x + 1)]);
+                boolean up = isTransitable(cells[(y - 1) * width + x]);
+                boolean down = isTransitable(cells[(y + 1) * width + x]);
+
+                boolean hasH = left || right;
+                boolean hasV = up || down;
+                if (!hasH || !hasV) {
+                    throw new GridValidationException("Invalid intersection '+' (requires perpendicular street connectivity) at (x=" + x + ", y=" + y + ")");
                 }
             }
         }
     }
 
-    private static void validateNoCrossroadsAsRoad(int width, int height, CellType[] cells) {
+    private static void validateRoadSegmentsAreStraight(int width, int height, CellType[] cells) {
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
                 int idx = y * width + x;
@@ -103,13 +127,20 @@ public final class GridLoader {
                     continue;
                 }
 
-                boolean hasH = (x - 1 >= 0 && isTransitable(cells[y * width + (x - 1)]))
-                        || (x + 1 < width && isTransitable(cells[y * width + (x + 1)]));
-                boolean hasV = (y - 1 >= 0 && isTransitable(cells[(y - 1) * width + x]))
-                        || (y + 1 < height && isTransitable(cells[(y + 1) * width + x]));
+                boolean left = x - 1 >= 0 && isTransitable(cells[y * width + (x - 1)]);
+                boolean right = x + 1 < width && isTransitable(cells[y * width + (x + 1)]);
+                boolean up = y - 1 >= 0 && isTransitable(cells[(y - 1) * width + x]);
+                boolean down = y + 1 < height && isTransitable(cells[(y + 1) * width + x]);
 
+                int degree = (left ? 1 : 0) + (right ? 1 : 0) + (up ? 1 : 0) + (down ? 1 : 0);
+                if (degree != 2) {
+                    throw new GridValidationException("Invalid road '.' connectivity (expected degree=2) at (x=" + x + ", y=" + y + ")");
+                }
+
+                boolean hasH = left || right;
+                boolean hasV = up || down;
                 if (hasH && hasV) {
-                    throw new GridValidationException("Invalid road '.' representing a crossroads; use '+' at (x=" + x + ", y=" + y + ")");
+                    throw new GridValidationException("Invalid road '.' representing a turn/crossroads; use '+' at (x=" + x + ", y=" + y + ")");
                 }
             }
         }
