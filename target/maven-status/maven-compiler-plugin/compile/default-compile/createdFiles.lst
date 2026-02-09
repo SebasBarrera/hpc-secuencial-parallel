@@ -2,10 +2,12 @@ com/nuti/traffic/sim/MetricsCollector.class
 com/nuti/traffic/sim/MoveRules$1.class
 com/nuti/traffic/model/TrafficLightState.class
 com/nuti/traffic/sim/SimulationConfig.class
+com/nuti/traffic/bench/SweepRunner$Stats.class
 com/nuti/traffic/model/CellType.class
 com/nuti/traffic/sim/VehicleInitializer.class
 com/nuti/traffic/model/TrafficLight.class
 com/nuti/traffic/sim/Occupancy.class
+com/nuti/traffic/bench/SweepRunner.class
 com/nuti/traffic/bench/BenchmarkRunner.class
 com/nuti/traffic/sim/RunMode.class
 com/nuti/traffic/io/CsvTicksWriter.class
@@ -21,5 +23,6 @@ com/nuti/traffic/util/DeterministicRng.class
 com/nuti/traffic/sim/MoveRules.class
 com/nuti/traffic/bench/BenchmarkRunner$Row.class
 com/nuti/traffic/sim/VehicleState.class
+com/nuti/traffic/bench/SweepRunner$Row.class
 com/nuti/traffic/sim/SequentialEngine.class
 com/nuti/traffic/sim/ParallelEngine.class

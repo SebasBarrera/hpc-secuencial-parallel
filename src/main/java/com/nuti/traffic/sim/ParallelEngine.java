@@ -57,7 +57,6 @@ public final class ParallelEngine implements SimulationEngine {
         try {
             Instant start = Instant.now();
             System.out.println("[" + start + "] START PARALLEL run grid=" + config.gridPath() + " N=" + n + " ticks=" + ticks + " threads=" + config.threads() + " seed=" + config.seed());
-            long startNs = System.nanoTime();
 
             int workerCount = Math.min(threads, Math.max(1, n));
             int[] movedCounts = new int[workerCount];
@@ -183,6 +182,8 @@ public final class ParallelEngine implements SimulationEngine {
                     }
                 });
             }
+
+            long startNs = System.nanoTime();
 
             for (int tick = 0; tick < ticks; tick++) {
                 updateLights(lights, tick);

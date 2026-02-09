@@ -1,0 +1,58 @@
+<svg xmlns='http://www.w3.org/2000/svg' width='960' height='600' viewBox='0 0 960 600'>
+<style>
+.title{font:700 22px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;fill:#111827}
+.subtitle{font:13px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;fill:#6b7280}
+.axis{stroke:#111827;stroke-width:2}
+.grid{stroke:#e5e7eb;stroke-width:1}
+.lbl{font:12px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;fill:#111827}
+.lbl-muted{font:12px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;fill:#6b7280}
+.legend{font:12px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;fill:#111827}
+</style>
+<rect x='0' y='0' width='960' height='600' fill='#ffffff'/>
+<text class='title' x='92' y='40'>Eficiencia vs hilos</text>
+<text class='subtitle' x='92' y='64'>mega_602 (602x602) | N=100000 | ticks=500 | reps=3 | seed=42</text>
+<line class='grid' x1='92' y1='578.63' x2='926' y2='578.63'/>
+<text class='lbl-muted' x='80' y='582.63' text-anchor='end'>-0.20</text>
+<line class='grid' x1='92' y1='502.59' x2='926' y2='502.59'/>
+<text class='lbl-muted' x='80' y='506.59' text-anchor='end'>0.00</text>
+<line class='grid' x1='92' y1='426.56' x2='926' y2='426.56'/>
+<text class='lbl-muted' x='80' y='430.56' text-anchor='end'>0.20</text>
+<line class='grid' x1='92' y1='350.52' x2='926' y2='350.52'/>
+<text class='lbl-muted' x='80' y='354.52' text-anchor='end'>0.40</text>
+<line class='grid' x1='92' y1='274.49' x2='926' y2='274.49'/>
+<text class='lbl-muted' x='80' y='278.49' text-anchor='end'>0.60</text>
+<line class='grid' x1='92' y1='198.45' x2='926' y2='198.45'/>
+<text class='lbl-muted' x='80' y='202.45' text-anchor='end'>0.80</text>
+<line class='grid' x1='92' y1='122.41' x2='926' y2='122.41'/>
+<text class='lbl-muted' x='80' y='126.41' text-anchor='end'>1.00</text>
+<line class='grid' x1='92' y1='46.38' x2='926' y2='46.38'/>
+<text class='lbl-muted' x='80' y='50.38' text-anchor='end'>1.20</text>
+<line class='grid' x1='92.00' y1='92' x2='92.00' y2='514'/>
+<text class='lbl-muted' x='92.00' y='538' text-anchor='middle'>2</text>
+<line class='grid' x1='300.50' y1='92' x2='300.50' y2='514'/>
+<text class='lbl-muted' x='300.50' y='538' text-anchor='middle'>4</text>
+<line class='grid' x1='717.50' y1='92' x2='717.50' y2='514'/>
+<text class='lbl-muted' x='717.50' y='538' text-anchor='middle'>8</text>
+<line class='grid' x1='926.00' y1='92' x2='926.00' y2='514'/>
+<text class='lbl-muted' x='926.00' y='538' text-anchor='middle'>10</text>
+<line class='axis' x1='92' y1='514' x2='926' y2='514'/>
+<line class='axis' x1='92' y1='92' x2='92' y2='514'/>
+<text class='lbl' x='509.00' y='574' text-anchor='middle'>Hilos (P)</text>
+<text class='lbl' x='26' y='303.00' text-anchor='middle' transform='rotate(-90 26 303.00)'>Eficiencia (speedup / P)</text>
+<polyline points='92.00,122.41 926.00,122.41' fill='none' stroke='#6b7280' stroke-width='2' stroke-dasharray='8 6' opacity='0.9' stroke-linecap='round'/>
+<polyline points='92.00,240.54 300.50,336.22 717.50,413.23 926.00,433.75' fill='none' stroke='#7c3aed' stroke-width='3' stroke-linejoin='round' stroke-linecap='round'/>
+<circle cx='92.00' cy='240.54' r='6' fill='#7c3aed' stroke='#ffffff' stroke-width='2'/>
+<circle cx='300.50' cy='336.22' r='6' fill='#7c3aed' stroke='#ffffff' stroke-width='2'/>
+<circle cx='717.50' cy='413.23' r='6' fill='#7c3aed' stroke='#ffffff' stroke-width='2'/>
+<circle cx='926.00' cy='433.75' r='6' fill='#7c3aed' stroke='#ffffff' stroke-width='2'/>
+<text class='lbl' x='102.00' y='230.54'>0.69</text>
+<text class='lbl' x='310.50' y='326.22'>0.44</text>
+<text class='lbl' x='727.50' y='403.23'>0.24</text>
+<text class='lbl' x='936.00' y='423.75'>0.18</text>
+<rect x='626' y='86' width='270' height='56' rx='10' ry='10' fill='#f9fafb' stroke='#e5e7eb'/>
+<line x1='642' y1='108' x2='674' y2='108' stroke='#7c3aed' stroke-width='3' stroke-linecap='round'/>
+<circle cx='658' cy='108' r='5.5' fill='#7c3aed' stroke='#ffffff' stroke-width='2'/>
+<text class='legend' x='684' y='114'>Eficiencia observada</text>
+<line x1='642' y1='128' x2='674' y2='128' stroke='#6b7280' stroke-width='2' stroke-dasharray='8 6' stroke-linecap='round'/>
+<text class='legend' x='684' y='134'>Ideal (y=1)</text>
+</svg>
