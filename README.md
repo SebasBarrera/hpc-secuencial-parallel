@@ -2,6 +2,10 @@
 
 Simulación Basada en Agentes (ABM) de tráfico urbano con motor secuencial y paralelo (paralelización por agentes).
 
+## Reporte
+
+- [`report/Reporte.pdf`](report/Reporte.pdf)
+
 ## Suposiciones y decisiones (para reproducibilidad)
 
 Este proyecto fija las siguientes decisiones para evitar ambigüedad y asegurar comparabilidad secuencial/paralela:
